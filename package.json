@@ -1,0 +1,56 @@
+{
+  "name": "dsh-mattpocock-skills",
+  "version": "0.1.0",
+  "description": "Matt Pocock's engineering and productivity skills (github.com/mattpocock/skills) as a DeepSeek Harness skill provider, re-synced from upstream by a shell script.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./frontmatter": "./lib/frontmatter.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "vendor",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "icon.svg",
+    "scripts",
+    "README.md",
+    "README-zh.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+    }
+  },
+  "scripts": {
+    "sync": "node scripts/sync-skills.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "skills",
+    "mattpocock",
+    "engineering",
+    "tdd",
+    "code-review"
+  ]
+}

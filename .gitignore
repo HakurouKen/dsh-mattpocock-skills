@@ -1,0 +1,10 @@
+# Dependencies
+node_modules/
+
+# Local verification scratch space
+.e2e/
+probe.log
+
+# OS / editor noise
+.DS_Store
+*.swp
