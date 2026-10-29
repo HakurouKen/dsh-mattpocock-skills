@@ -230,6 +230,32 @@ check('invocation: a non-boolean spelling is rejected', () => {
 // ---------------------------------------------------------------------------
 
 const manifest = JSON.parse(readFileSync(join(VENDOR_DIR, 'PROVENANCE.json'), 'utf8'))
+
+/**
+ * Read the vendored skill inventory from disk. The manifest deliberately no
+ * longer lists skills, so the tree is the single source of truth and cannot
+ * disagree with a duplicated list.
+ * @returns {Array<{ name: string, directory: string }>}
+ */
+function vendoredSkills() {
+  const skillsRoot = join(VENDOR_DIR, 'skills')
+  const entries = []
+  for (const bucket of readdirSync(skillsRoot, { withFileTypes: true })) {
+    if (!bucket.isDirectory()) continue
+    for (const entry of readdirSync(join(skillsRoot, bucket.name), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const locator = join(skillsRoot, bucket.name, entry.name, 'SKILL.md')
+      if (!statSync(locator).isFile()) continue
+      const raw = readFileSync(locator, 'utf8')
+      const fence = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---/.exec(raw)
+      const declared = fence === null ? '' : (/^name[ \t]*:[ \t]*(.+)$/m.exec(fence[1])?.[1] ?? '').trim()
+      entries.push({ name: declared || entry.name, directory: `${bucket.name}/${entry.name}` })
+    }
+  }
+  return entries
+}
+
+const vendored = vendoredSkills()
 const { provider, warnings, dispose } = await activate(undefined)
 const catalog = await provider.list()
 
@@ -242,7 +268,7 @@ check('provider: registers under a non-reserved provider name', () => {
 
 check('provider: every upstream skill is in the catalog', () => {
   const names = catalog.map((skill) => skill.name).sort()
-  const expected = manifest.skills.map((skill) => skill.name).sort()
+  const expected = vendored.map((skill) => skill.name).sort()
   equal(names.length, expected.length, 'catalog size')
   equal(JSON.stringify(names), JSON.stringify(expected), 'catalog names')
   equal(catalog.length, 38, 'the pinned upstream commit has 38 skills')
@@ -346,13 +372,13 @@ check('provider: get() on a vanished file reports undefined and invalidates', as
 
 check('vendor: PROVENANCE.json records a commit and a version', () => {
   assert(/^[0-9a-f]{40}$/.test(manifest.upstream.commit), 'commit should be a full SHA')
-  assert(manifest.versions === undefined, 'no stray field')
-  assert(manifest.skillCount === manifest.skills.length, 'skillCount should match the skill list')
+  assert(manifest.skills === undefined, 'the manifest should not duplicate the skill list')
+  equal(manifest.skillCount, vendored.length, 'skillCount should match the vendored tree')
   assert(typeof manifest.upstream.version === 'string' && manifest.upstream.version.length > 0, 'upstream version')
 })
 
 check('vendor: every listed skill directory exists with a SKILL.md', () => {
-  for (const skill of manifest.skills) {
+  for (const skill of vendored) {
     const path = join(VENDOR_DIR, 'skills', skill.directory, 'SKILL.md')
     assert(statSync(path).isFile(), `${path} should exist`)
   }
@@ -366,7 +392,7 @@ check('vendor: no unlisted skill directory is present', () => {
       if (entry.isDirectory()) found.push(`${bucket.name}/${entry.name}`)
     }
   }
-  equal(JSON.stringify(found.sort()), JSON.stringify(manifest.skills.map((skill) => skill.directory).sort()), 'directories')
+  equal(JSON.stringify(found.sort()), JSON.stringify(vendored.map((skill) => skill.directory).sort()), 'directories')
 })
 
 check('vendor: skill resources travel with the body', () => {

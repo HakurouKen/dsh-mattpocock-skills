@@ -109,9 +109,13 @@ It clones upstream into a temporary directory, copies each skill directory
 (bodies plus their `references/`, `scripts/`, `assets/`, and `agents/`
 siblings), and rewrites `vendor/mattpocock-skills/` only after the staged copy
 is complete — an interrupted run leaves the previous tree usable, and the
-temporary directory is removed even when the run fails. It records the commit,
-date, upstream version, and per-skill invocation policy in
-`vendor/mattpocock-skills/PROVENANCE.json`.
+temporary directory is removed even when the run fails.
+
+It records only provenance — the upstream repository, commit, commit date,
+version, and skill count — in `vendor/mattpocock-skills/PROVENANCE.json`, a file
+of under 500 bytes. The skill list is deliberately not duplicated there: the
+directory tree already is the list, so discovery reads the tree and the two
+cannot disagree. Nothing else is derived twice.
 
 | Flags / environment | Meaning |
 |---|---|

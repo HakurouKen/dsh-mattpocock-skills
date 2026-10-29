@@ -175,30 +175,6 @@ function listDirectories(path) {
 }
 
 /**
- * First `name: value` occurrence inside a skill's YAML frontmatter.
- * @param {string} raw
- * @param {string} key
- * @returns {string}
- */
-function frontmatterField(raw, key) {
-  const fence = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---/.exec(raw)
-  if (fence === null) return ''
-  const match = new RegExp(`^${key}[ \t]*:[ \t]*(.+)$`, 'm').exec(fence[1])
-  return match === null ? '' : match[1].trim().replace(/^["']|["']$/g, '')
-}
-
-/**
- * Whether the frontmatter marks the skill model-invocation-disabled.
- * @param {string} raw
- * @returns {boolean}
- */
-function modelInvocable(raw) {
-  const fence = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---/.exec(raw)
-  if (fence === null) return true
-  return !/^disable-model-invocation[ \t]*:[ \t]*true[ \t]*$/m.test(fence[1])
-}
-
-/**
  * Copy a skill directory into the stage, preserving its resources.
  * @param {string} source
  * @param {string} destination
@@ -222,8 +198,7 @@ function stageMirror(repoDir, stage, origin) {
   }
 
   const buckets = []
-  /** @type {Array<{ name: string, directory: string, bucket: string, description: string, modelInvocable: boolean }>} */
-  const skills = []
+  let skillCount = 0
 
   for (const bucket of listDirectories(skillsRoot)) {
     const bucketDir = join(skillsRoot, bucket)
@@ -231,16 +206,8 @@ function stageMirror(repoDir, stage, origin) {
     if (skillNames.length === 0) continue
     buckets.push(bucket)
     for (const name of skillNames) {
-      const source = join(bucketDir, name)
-      copySkill(source, join(stage, 'skills', bucket, name))
-      const raw = readFileSync(join(source, 'SKILL.md'), 'utf8')
-      skills.push({
-        name: frontmatterField(raw, 'name') || name,
-        directory: `${bucket}/${name}`,
-        bucket,
-        description: frontmatterField(raw, 'description').slice(0, 200),
-        modelInvocable: modelInvocable(raw),
-      })
+      copySkill(join(bucketDir, name), join(stage, 'skills', bucket, name))
+      skillCount += 1
     }
     // Bucket READMEs document the user-invoked / model-invoked split upstream
     // uses; carry them so the vendored tree reads like the source.
@@ -251,8 +218,7 @@ function stageMirror(repoDir, stage, origin) {
     }
   }
 
-  if (skills.length === 0) fail('found no SKILL.md under skills/; nothing to vendor')
-  skills.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
+  if (skillCount === 0) fail('found no SKILL.md under skills/; nothing to vendor')
 
   for (const doc of ROOT_DOCS) {
     const source = join(repoDir, doc)
@@ -286,13 +252,13 @@ function stageMirror(repoDir, stage, origin) {
       describe,
       version: version || null,
     },
+    // Stamped only when the content changes: a scheduled run with no upstream
+    // change writes nothing, so the tree (and git status) stay clean.
     syncedAt: new Date().toISOString(),
-    skillCount: skills.length,
-    buckets,
-    skills,
+    skillCount,
   }
   writeFileSync(join(stage, 'PROVENANCE.json'), `${JSON.stringify(manifest, undefined, 2)}\n`)
-  return { skills: skills.length, buckets, commit, describe, version }
+  return { skills: skillCount, buckets, commit, describe, version }
 }
 
 /**
@@ -309,10 +275,29 @@ function compare(stagedPath, currentPath) {
   if (staged.upstream.commit !== current.upstream?.commit) {
     return { upToDate: false, reason: `upstream moved from ${String(current.upstream?.commit).slice(0, 12)} to ${staged.upstream.commit.slice(0, 12)}` }
   }
-  const stagedNames = staged.skills.map((skill) => skill.name).join(',')
-  const currentNames = (current.skills ?? []).map((skill) => skill.name).join(',')
+  // The manifest no longer lists skills, so the set is compared on disk.
+  const stagedNames = listSkillNames(stagedPath)
+  const currentNames = listSkillNames(currentPath)
   if (stagedNames !== currentNames) return { upToDate: false, reason: 'the skill set changed upstream' }
   return { upToDate: true, reason: '' }
+}
+
+/**
+ * List the skill directories beside a manifest file, for comparing two trees
+ * without storing a redundant per-skill list in the manifest itself.
+ * @param {string} manifestPath
+ * @returns {string} sorted `bucket/name` entries joined with commas.
+ */
+function listSkillNames(manifestPath) {
+  const skillsRoot = join(dirname(manifestPath), 'skills')
+  if (!existsSync(skillsRoot)) return ''
+  const names = []
+  for (const bucket of listDirectories(skillsRoot)) {
+    for (const name of listDirectories(join(skillsRoot, bucket))) {
+      if (existsSync(join(skillsRoot, bucket, name, 'SKILL.md'))) names.push(`${bucket}/${name}`)
+    }
+  }
+  return names.sort().join(',')
 }
 
 /**
