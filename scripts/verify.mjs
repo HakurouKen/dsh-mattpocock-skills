@@ -340,11 +340,13 @@ check('provider: a missing root degrades to an empty catalog with a warning', as
   await isolated.dispose()
 })
 
-check('provider: buckets config narrows the catalog', async () => {
-  const isolated = await activate({ buckets: ['productivity'], watch: false })
+check('provider: a custom skillRoot is honored', async () => {
+  // The flat layout means a user can point skillRoot at any directory holding
+  // one subdirectory per skill, without any bucket layer.
+  const isolated = await activate({ skillRoot: VENDOR_DIR, watch: false })
   const list = await isolated.provider.list()
-  assert(list.length > 0, 'productivity should not be empty')
-  for (const skill of list) assert(skill.source.endsWith('#productivity'), `unexpected bucket in ${skill.source}`)
+  equal(list.length, 38, 'the vendored root should yield every skill')
+  for (const skill of list) equal(skill.source, 'mattpocock/skills@1.3.1', 'a flat tree has no bucket suffix')
   await isolated.dispose()
 })
 
@@ -517,16 +519,12 @@ check('config: the shipped empty row validates under either schema backend', () 
   assert(result.issues === undefined, 'an absent config should validate')
   // Two legitimate backends exist, and the environment picks one:
   // - with Schemastery resolvable (a real profile), the row arrives with
-  //   schema defaults filled in, so an omitted `buckets` becomes `[]`;
+  //   schema defaults filled in for the fields it declares;
   // - without it (a bare checkout, CI), the package's own validator returns
   //   the fully normalized settings instead.
   // Both must pass, so assert the contract rather than one shape: an omitted
-  // `buckets` means "no restriction", and `watch` defaults to on.
+  // `watch` defaults to on and nothing else is required.
   const value = result.value
-  assert(
-    value.buckets === undefined || (Array.isArray(value.buckets) && value.buckets.length === 0),
-    `an omitted buckets field must mean no restriction, got ${JSON.stringify(value.buckets)}`,
-  )
   assert(value.watch === undefined || value.watch === true, `watch must default to on, got ${JSON.stringify(value.watch)}`)
   if (value.skillRoot !== undefined) assert(typeof value.skillRoot === 'string', 'skillRoot must be a string when present')
 })
