@@ -371,11 +371,23 @@ check('provider: get() on a vanished file reports undefined and invalidates', as
 // 5. Vendored-tree integrity.
 // ---------------------------------------------------------------------------
 
-check('vendor: PROVENANCE.json records a commit and a version', () => {
+check('vendor: PROVENANCE.json records a commit and an upstream-derived version', () => {
   assert(/^[0-9a-f]{40}$/.test(manifest.upstream.commit), 'commit should be a full SHA')
   assert(manifest.skills === undefined, 'the manifest should not duplicate the skill list')
   equal(manifest.skillCount, vendored.length, 'skillCount should match the vendored tree')
-  assert(typeof manifest.upstream.version === 'string' && manifest.upstream.version.length > 0, 'upstream version')
+
+  // This package does not manage a version of its own. The identity is whatever
+  // upstream published for that commit: a tag only when the commit carries one,
+  // otherwise the commit SHA. Never a number we invent, and never upstream's
+  // `package.json` version, which can name a release whose tag points elsewhere.
+  const version = manifest.upstream.version
+  assert(typeof version === 'string' && version.length > 0, 'upstream identity must be present')
+  const isTag = !/^[0-9a-f]{12}$/.test(version)
+  if (isTag) {
+    assert(/^v?\d/.test(version), `a tag identity should look like a release tag, got "${version}"`)
+  } else {
+    equal(version, manifest.upstream.commit.slice(0, 12), 'a SHA identity should be the commit prefix')
+  }
 })
 
 check('vendor: every listed skill directory exists with a SKILL.md', () => {

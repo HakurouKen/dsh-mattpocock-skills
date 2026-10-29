@@ -112,10 +112,17 @@ is complete — an interrupted run leaves the previous tree usable, and the
 temporary directory is removed even when the run fails.
 
 It records only provenance — the upstream repository, commit, commit date,
-version, and skill count — in `skills/PROVENANCE.json`, a file
-of under 500 bytes. The skill list is deliberately not duplicated there: the
-directory tree already is the list, so discovery reads the tree and the two
-cannot disagree. Nothing else is derived twice.
+identity, and skill count — in `skills/PROVENANCE.json`, a file of under 500
+bytes. The skill list is deliberately not duplicated there: the directory tree
+already is the list, so discovery reads the tree and the two cannot disagree.
+
+**This package does not manage a version of its own.** A synced commit is
+identified by what upstream actually published: the release tag when that exact
+commit carries one, otherwise the commit SHA. Upstream's `package.json` version
+is deliberately ignored, because it can name a release whose tag points at a
+different commit — `skills@1.3.2` would then identify two different trees at
+once. So the catalog source reads `mattpocock/skills@v1.3.2` on a tagged commit
+and `mattpocock/skills@a496f5513d4a` on the default branch.
 
 | Flags / environment | Meaning |
 |---|---|
