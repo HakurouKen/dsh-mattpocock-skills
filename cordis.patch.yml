@@ -4,7 +4,7 @@
 # github.com/mattpocock/skills, so every upstream skill joins the session
 # catalog without touching `.dsh/skills`, `.agents/skills`, or `~/.dsh/skills`.
 #
-# `config` is optional; the defaults read `vendor/mattpocock-skills/skills`
+# `config` is optional; the defaults read `skills/`
 # from this package. Restate the whole `config` mapping when overriding a row,
 # because a matching override replaces it instead of merging.
 - insert:

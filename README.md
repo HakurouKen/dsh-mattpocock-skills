@@ -51,7 +51,7 @@ More precisely, it also fits you if:
 
 - **You keep agent config global and project-agnostic.** No per-repo setup, no
   `.agents/skills` committed into each repository.
-- **You want the skills pinned and auditable.** `vendor/` records the exact
+- **You want the skills pinned and auditable.** `skills/PROVENANCE.json` records the exact
   upstream commit in `PROVENANCE.json`, instead of tracking a moving global
   directory.
 - **You want the user-invoked / model-invoked split preserved.** The 23 skills
@@ -100,19 +100,19 @@ dsh plugin --profile <profile> remove dsh-mattpocock-skills
 ```bash
 node scripts/sync-skills.mjs               # track the default branch
 node scripts/sync-skills.mjs --ref v1.3.1  # pin a tag, branch, or commit
-node scripts/sync-skills.mjs --check       # exit 1 when vendor/ is stale (CI gate)
+node scripts/sync-skills.mjs --check       # exit 1 when skills/ is stale (CI gate)
 pnpm sync                                  # same as the first command
 ```
 
 A Node.js script with no dependencies, so it runs anywhere `node` and `git` do.
 It clones upstream into a temporary directory, copies each skill directory
 (bodies plus their `references/`, `scripts/`, `assets/`, and `agents/`
-siblings), and rewrites `vendor/mattpocock-skills/` only after the staged copy
+siblings), and rewrites `skills/` only after the staged copy
 is complete — an interrupted run leaves the previous tree usable, and the
 temporary directory is removed even when the run fails.
 
 It records only provenance — the upstream repository, commit, commit date,
-version, and skill count — in `vendor/mattpocock-skills/PROVENANCE.json`, a file
+version, and skill count — in `skills/PROVENANCE.json`, a file
 of under 500 bytes. The skill list is deliberately not duplicated there: the
 directory tree already is the list, so discovery reads the tree and the two
 cannot disagree. Nothing else is derived twice.
@@ -121,13 +121,13 @@ cannot disagree. Nothing else is derived twice.
 |---|---|
 | `--ref <ref>` | Tag, branch, or commit to vendor instead of the default branch |
 | `--repo <url>` | Clone from a fork instead of upstream |
-| `--check` | Vendor nothing; compare the staged manifest with `vendor/` and exit 1 when they differ |
+| `--check` | Vendor nothing; compare the staged tree with `skills/` and exit 1 when they differ |
 | `MATTPOCOCK_SKILLS_REF` | Default for `--ref` |
 | `MATTPOCOCK_SKILLS_REPO` | Default for `--repo` |
 
 Exit codes: `0` success or up to date, `1` failure or stale, `2` bad arguments.
 `--check` is the CI gate: it still clones (so it sees new upstream commits) but
-never writes to `vendor/`.
+never writes to `skills/`.
 
 ### Automated daily sync
 
@@ -137,12 +137,12 @@ still tracks upstream.
 
 The job is deliberately quiet: it runs `--check` first, and if upstream has not
 moved it exits having committed nothing. When upstream *has* moved, it syncs,
-runs all 44 checks, and only then commits `vendor/` and pushes — so a malformed
+runs all 44 checks, and only then commits `skills/` and pushes — so a malformed
 upstream `SKILL.md` fails the job instead of reaching the branch.
 
 ```
 Check upstream → (no change) done
-               → (changed) sync → verify 44 checks → commit vendor/ → push
+               → (changed) sync → verify 44 checks → commit skills/ → push
 ```
 
 Design details worth knowing:
@@ -151,7 +151,7 @@ Design details worth knowing:
   `syncedAt` normalized out, so a day with no upstream change produces no
   commit. `syncedAt` therefore records when the content last *changed*, not
   when it was last checked.
-- **Only `vendor/` is committed.** The job stages `git add -- vendor`, so a
+- **Only `skills/` is committed.** The job stages `git add -- skills`, so a
   stray write elsewhere in the runner cannot ride along.
 - **Commits are unattributed by design.** They are authored by
   `github-actions[bot]`, and `GITHUB_TOKEN` commits do not trigger further
@@ -190,9 +190,13 @@ provider** on `ctx.skills` — the same seam `dsh-skill-filesystem` and
 `dsh-skill-office` use — over the vendored tree:
 
 ```
-skills/<bucket>/<name>/SKILL.md     -> one catalog entry
-skills/<bucket>/<name>/references/  -> the skill's resource base
+skills/<name>/SKILL.md     -> one catalog entry
+skills/<name>/references/  -> the skill's resource base
 ```
+
+One directory per skill, flat. Upstream's bucket layer (`engineering`,
+`productivity`, …) is dropped: it is their organising device, nothing in the
+harness consumes it, and every skill name is unique across buckets.
 
 Nothing is written to `.dsh/skills`, `.agents/skills`, or `~/.dsh/skills`, so
 the plugin cannot collide with a project's own skills and needs no per-project
@@ -221,9 +225,8 @@ The row needs no `config`. These fields are optional:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `skillRoot` | the vendored `skills/` tree | Directory scanned for bucket subdirectories |
+| `skillRoot` | the vendored `skills/` tree | Directory holding one subdirectory per skill |
 | `provenance` | the vendored `PROVENANCE.json` | Attribution source; `false` omits it |
-| `buckets` | all buckets | Restrict to names such as `["engineering"]` |
 | `watch` | `true` | Rebuild the catalog when `SKILL.md` files change |
 
 Unknown keys are rejected rather than ignored, so a typo in `skillRoot` fails
@@ -233,13 +236,14 @@ replaces it instead of merging.
 
 ## What is and is not included
 
-Included: every `SKILL.md` with its sibling resources, each bucket's
-`README.md`, upstream's `LICENSE`, top-level `README.md`, and the upstream
-`.claude-plugin/plugin.json` for provenance.
+Included: every skill directory (`SKILL.md` plus its `references/`,
+`scripts/`, `assets/`, and `agents/` siblings), and upstream's `LICENSE` so
+attribution travels with the content.
 
-Not included: `skills/deprecated/` (a README with no skills), upstream's
-`.git`, CI workflows, `docs/`, `.agents/`, and `.out-of-scope/` — maintenance
-material for upstream contributors, not part of the skills.
+Not included — deliberately, to keep the vendored tree to skills and their
+licence: upstream's bucket `README.md`s, top-level `README.md`,
+`.claude-plugin/plugin.json`, `.git`, CI workflows, `docs/`, `.agents/`, and
+`.out-of-scope/`. `skills/deprecated/` is empty of skills and skipped.
 
 Two upstream skills describe Claude Code specifics that DSH does not have:
 `git-guardrails-claude-code` sets up Claude Code hooks, and `claude-handoff`
@@ -258,16 +262,16 @@ icon.svg                      bundle icon
 scripts/sync-skills.mjs        vendors the upstream tree (Node, no deps)
 scripts/verify.mjs            contract checks
 .github/workflows/sync-skills.yml  daily upstream sync (00:00 UTC)
-vendor/mattpocock-skills/     generated by sync-skills.mjs — do not edit
+skills/                       generated by sync-skills.mjs — do not edit
 ```
 
-`vendor/` is generated. Edit it and the next sync overwrites the change; to
+`skills/` is generated. Edit it and the next sync overwrites the change; to
 change a skill, fork upstream and point `MATTPOCOCK_SKILLS_REPO` at the fork.
 
 ## Licence
 
 The plugin code is MIT. The vendored skills are MIT, © Matt Pocock, and the
-upstream `LICENSE` travels with them in `vendor/mattpocock-skills/LICENSE`. See
+upstream `LICENSE` travels with them in `skills/LICENSE`. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 [upstream]: https://github.com/mattpocock/skills

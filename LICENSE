@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-The vendored skills under `vendor/mattpocock-skills/` are licensed separately:
+The vendored skills under `skills/` are licensed separately:
 MIT, Copyright (c) Matt Pocock and the contributors of
 https://github.com/mattpocock/skills. Their licence text is vendored at
-`vendor/mattpocock-skills/LICENSE`. See THIRD_PARTY_NOTICES.md.
+`skills/LICENSE`. See THIRD_PARTY_NOTICES.md.

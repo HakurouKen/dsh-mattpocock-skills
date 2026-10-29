@@ -4,14 +4,14 @@
  *
  * The plugin ships the upstream tree instead of a hand-copied snapshot: this
  * script clones the repository at the requested ref, stages a mirror of
- * `skills/`, and only then replaces `vendor/`. A later reader can tell exactly
+ * `skills/`, and only then replaces it. A later reader can tell exactly
  * which commit the bodies came from by reading the provenance manifest the
- * script writes. Re-run it to update; never edit `vendor/` by hand.
+ * script writes. Re-run it to update; never edit `skills/` by hand.
  *
  * Usage:
  *   scripts/sync-skills.mjs                 # track the default branch
  *   scripts/sync-skills.mjs --ref v1.3.1    # pin a tag, branch, or commit
- *   scripts/sync-skills.mjs --check         # exit 1 when vendor/ is stale
+ *   scripts/sync-skills.mjs --check         # exit 1 when skills/ is stale
  *
  * Environment:
  *   MATTPOCOCK_SKILLS_REPO   clone URL    (default: https://github.com/mattpocock/skills.git)
@@ -31,14 +31,8 @@ import { fileURLToPath } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_DIR = resolve(SCRIPT_DIR, '..')
-const VENDOR_DIR = join(PACKAGE_DIR, 'vendor', 'mattpocock-skills')
+const VENDOR_DIR = join(PACKAGE_DIR, 'skills')
 const MANIFEST = join(VENDOR_DIR, 'PROVENANCE.json')
-
-/** Files copied from the repository root, when present. */
-const ROOT_DOCS = ['LICENSE', 'README.md']
-
-/** Files copied from the repository root directory, when present. */
-const ROOT_FILES = [join('.claude-plugin', 'plugin.json')]
 
 /**
  * Print usage, taken from this file's header so the two cannot drift.
@@ -189,7 +183,7 @@ function copySkill(source, destination) {
  * @param {string} repoDir - cloned repository root.
  * @param {string} stage - empty directory to fill.
  * @param {{ repository: string, requestedRef: string }} origin
- * @returns {{ skills: number, buckets: string[], commit: string, describe: string, version: string }}
+ * @returns {{ skills: number, commit: string, describe: string, version: string }}
  */
 function stageMirror(repoDir, stage, origin) {
   const skillsRoot = join(repoDir, 'skills')
@@ -197,39 +191,31 @@ function stageMirror(repoDir, stage, origin) {
     fail(`${origin.repository} has no skills/ directory; the upstream layout changed and the plugin needs updating`)
   }
 
-  const buckets = []
-  let skillCount = 0
-
+  // Flatten `skills/<bucket>/<name>` to `skills/<name>`: the bucket is
+  // upstream's organising device, not something a consumer needs, and skill
+  // directory names are unique across buckets (asserted below), so one level is
+  // enough. Each skill keeps its own resources beside its SKILL.md.
+  /** @type {Map<string, string>} */
+  const claimed = new Map()
   for (const bucket of listDirectories(skillsRoot)) {
     const bucketDir = join(skillsRoot, bucket)
-    const skillNames = listDirectories(bucketDir).filter((name) => existsSync(join(bucketDir, name, 'SKILL.md')))
-    if (skillNames.length === 0) continue
-    buckets.push(bucket)
-    for (const name of skillNames) {
-      copySkill(join(bucketDir, name), join(stage, 'skills', bucket, name))
-      skillCount += 1
-    }
-    // Bucket READMEs document the user-invoked / model-invoked split upstream
-    // uses; carry them so the vendored tree reads like the source.
-    const readme = join(bucketDir, 'README.md')
-    if (existsSync(readme)) {
-      mkdirSync(join(stage, 'skills', bucket), { recursive: true })
-      cpSync(readme, join(stage, 'skills', bucket, 'README.md'))
+    for (const name of listDirectories(bucketDir)) {
+      if (!existsSync(join(bucketDir, name, 'SKILL.md'))) continue
+      const owner = claimed.get(name)
+      if (owner !== undefined) {
+        fail(`upstream has two skills named "${name}" (${owner} and ${bucket}); the flat layout needs unique names`)
+      }
+      claimed.set(name, bucket)
+      copySkill(join(bucketDir, name), join(stage, name))
     }
   }
 
-  if (skillCount === 0) fail('found no SKILL.md under skills/; nothing to vendor')
+  if (claimed.size === 0) fail('found no SKILL.md under skills/; nothing to vendor')
 
-  for (const doc of ROOT_DOCS) {
-    const source = join(repoDir, doc)
-    if (existsSync(source)) cpSync(source, join(stage, doc))
-  }
-  for (const file of ROOT_FILES) {
-    const source = join(repoDir, file)
-    if (!existsSync(source)) continue
-    mkdirSync(dirname(join(stage, file)), { recursive: true })
-    cpSync(source, join(stage, file))
-  }
+  // LICENSE only: attribution has to travel with the content. Upstream's
+  // README, .claude-plugin metadata, and contributor docs are not used here.
+  const license = join(repoDir, 'LICENSE')
+  if (existsSync(license)) cpSync(license, join(stage, 'LICENSE'))
 
   const commit = git(['rev-parse', 'HEAD'], { cwd: repoDir })
   const commitDate = git(['log', '-1', '--format=%cI'], { cwd: repoDir })
@@ -255,10 +241,10 @@ function stageMirror(repoDir, stage, origin) {
     // Stamped only when the content changes: a scheduled run with no upstream
     // change writes nothing, so the tree (and git status) stay clean.
     syncedAt: new Date().toISOString(),
-    skillCount,
+    skillCount: claimed.size,
   }
   writeFileSync(join(stage, 'PROVENANCE.json'), `${JSON.stringify(manifest, undefined, 2)}\n`)
-  return { skills: skillCount, buckets, commit, describe, version }
+  return { skills: claimed.size, commit, describe, version }
 }
 
 /**
@@ -271,7 +257,7 @@ function compare(stagedPath, currentPath) {
   const staged = readJson(stagedPath)
   const current = readJson(currentPath)
   if (staged === undefined) return { upToDate: false, reason: 'the staged manifest could not be read' }
-  if (current === undefined) return { upToDate: false, reason: 'vendor/ has no readable PROVENANCE.json' }
+  if (current === undefined) return { upToDate: false, reason: 'skills/ has no readable PROVENANCE.json' }
   if (staged.upstream.commit !== current.upstream?.commit) {
     return { upToDate: false, reason: `upstream moved from ${String(current.upstream?.commit).slice(0, 12)} to ${staged.upstream.commit.slice(0, 12)}` }
   }
@@ -342,7 +328,7 @@ function treeDigest(dir) {
 }
 
 /**
- * Replace `vendor/` with the stage. The previous tree is removed only after the
+ * Replace `skills/` with the stage. The previous tree is removed only after the
  * stage is complete, so an interrupted run leaves the old skills usable.
  * @param {string} stage
  */
@@ -375,15 +361,15 @@ async function main() {
     const stage = join(workDir, 'stage')
     mkdirSync(stage, { recursive: true })
     const result = stageMirror(repoDir, stage, { repository: options.repo, requestedRef: options.ref })
-    process.stdout.write(`    ${result.skills} skills in ${result.buckets.length} buckets\n`)
+    process.stdout.write(`    ${result.skills} skills\n`)
 
     if (options.check) {
       const { upToDate, reason } = compare(join(stage, 'PROVENANCE.json'), MANIFEST)
       if (upToDate) {
-        process.stdout.write(`==> vendor/ is up to date with ${result.describe} (${result.commit.slice(0, 12)})\n`)
+        process.stdout.write(`==> skills/ is up to date with ${result.describe} (${result.commit.slice(0, 12)})\n`)
         return 0
       }
-      process.stdout.write(`==> vendor/ is stale: ${reason}\n    re-run scripts/sync-skills.mjs to update\n`)
+      process.stdout.write(`==> skills/ is stale: ${reason}\n    re-run scripts/sync-skills.mjs to update\n`)
       return 1
     }
 
@@ -392,12 +378,12 @@ async function main() {
     // `syncedAt` therefore records when the content last changed, not when it
     // was last checked; nothing is written here, keeping the work tree clean.
     if (existsSync(VENDOR_DIR) && treeDigest(stage) === treeDigest(VENDOR_DIR)) {
-      process.stdout.write(`==> vendor/ already matches ${result.describe} (${result.commit.slice(0, 12)}); nothing to do\n`)
+      process.stdout.write(`==> skills/ already matches ${result.describe} (${result.commit.slice(0, 12)}); nothing to do\n`)
       return 0
     }
 
     publish(stage)
-    process.stdout.write(`==> vendored ${result.skills} skills into vendor/mattpocock-skills\n`)
+    process.stdout.write(`==> vendored ${result.skills} skills into skills/\n`)
     process.stdout.write(
       `    upstream ${result.version === '' ? 'unknown version' : result.version} @ ${result.commit.slice(0, 12)} (${result.describe})\n`,
     )

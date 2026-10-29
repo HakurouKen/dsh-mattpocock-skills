@@ -4,12 +4,12 @@
 
 This package vendors the skill content of
 [github.com/mattpocock/skills](https://github.com/mattpocock/skills) into
-`vendor/mattpocock-skills/`. That content is not original to this package.
+`skills/`. That content is not original to this package.
 
 - **Copyright** © Matt Pocock and the repository's contributors
 - **Licence** MIT — the full text is vendored at
-  `vendor/mattpocock-skills/LICENSE`
-- **Upstream version** recorded in `vendor/mattpocock-skills/PROVENANCE.json`,
+  `skills/LICENSE`
+- **Upstream version** recorded in `skills/PROVENANCE.json`,
   including the exact commit each skill body came from
 - **Not affiliated** with Matt Pocock or aihero.dev; this is an independent
   packaging of the published skills for DeepSeek Harness

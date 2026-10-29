@@ -73,18 +73,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Only `vendor/` is generated; refuse to commit anything else so a
+          # Only `skills/` is generated; refuse to commit anything else so a
           # stray local write in this job cannot ride along.
-          git add -- vendor
+          git add -- skills
           if git diff --cached --quiet; then
             echo "No vendored changes to commit."
             exit 0
           fi
 
-          commit=$(node -e 'const m=require("./vendor/mattpocock-skills/PROVENANCE.json");process.stdout.write(m.upstream.commit.slice(0,12))')
-          describe=$(node -e 'const m=require("./vendor/mattpocock-skills/PROVENANCE.json");process.stdout.write(m.upstream.describe??"")')
-          version=$(node -e 'const m=require("./vendor/mattpocock-skills/PROVENANCE.json");process.stdout.write(m.upstream.version??"unknown")')
-          count=$(node -e 'const m=require("./vendor/mattpocock-skills/PROVENANCE.json");process.stdout.write(String(m.skillCount))')
+          commit=$(node -e 'const m=require("./skills/PROVENANCE.json");process.stdout.write(m.upstream.commit.slice(0,12))')
+          describe=$(node -e 'const m=require("./skills/PROVENANCE.json");process.stdout.write(m.upstream.describe??"")')
+          version=$(node -e 'const m=require("./skills/PROVENANCE.json");process.stdout.write(m.upstream.version??"unknown")')
+          count=$(node -e 'const m=require("./skills/PROVENANCE.json");process.stdout.write(String(m.skillCount))')
 
           git commit -m "chore: sync upstream skills to ${version} (${describe})" \
                      -m "Vendored ${count} skills from github.com/mattpocock/skills at ${commit}.

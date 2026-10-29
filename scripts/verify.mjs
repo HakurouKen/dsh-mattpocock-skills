@@ -24,7 +24,7 @@ import { Config, apply } from '../lib/index.js'
 import { parseFrontmatter, invocationPolicy } from '../lib/frontmatter.js'
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url))
-const VENDOR_DIR = join(PACKAGE_DIR, 'vendor', 'mattpocock-skills')
+const VENDOR_DIR = join(PACKAGE_DIR, 'skills')
 const MANIFEST_PATH = join(VENDOR_DIR, 'PROVENANCE.json')
 
 let failures = 0
@@ -238,19 +238,15 @@ const manifest = JSON.parse(readFileSync(join(VENDOR_DIR, 'PROVENANCE.json'), 'u
  * @returns {Array<{ name: string, directory: string }>}
  */
 function vendoredSkills() {
-  const skillsRoot = join(VENDOR_DIR, 'skills')
   const entries = []
-  for (const bucket of readdirSync(skillsRoot, { withFileTypes: true })) {
-    if (!bucket.isDirectory()) continue
-    for (const entry of readdirSync(join(skillsRoot, bucket.name), { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue
-      const locator = join(skillsRoot, bucket.name, entry.name, 'SKILL.md')
-      if (!statSync(locator).isFile()) continue
-      const raw = readFileSync(locator, 'utf8')
-      const fence = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---/.exec(raw)
-      const declared = fence === null ? '' : (/^name[ \t]*:[ \t]*(.+)$/m.exec(fence[1])?.[1] ?? '').trim()
-      entries.push({ name: declared || entry.name, directory: `${bucket.name}/${entry.name}` })
-    }
+  for (const entry of readdirSync(VENDOR_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const locator = join(VENDOR_DIR, entry.name, 'SKILL.md')
+    if (!statSync(locator).isFile()) continue
+    const raw = readFileSync(locator, 'utf8')
+    const fence = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---/.exec(raw)
+    const declared = fence === null ? '' : (/^name[ \t]*:[ \t]*(.+)$/m.exec(fence[1])?.[1] ?? '').trim()
+    entries.push({ name: declared || entry.name, directory: entry.name })
   }
   return entries
 }
@@ -337,7 +333,7 @@ check('provider: uses the bundled rank and attributes the upstream commit', () =
 })
 
 check('provider: a missing root degrades to an empty catalog with a warning', async () => {
-  const isolated = await activate({ skillRoot: join(PACKAGE_DIR, 'vendor', 'does-not-exist'), watch: false })
+  const isolated = await activate({ skillRoot: join(PACKAGE_DIR, 'does-not-exist'), watch: false })
   const list = await isolated.provider.list()
   equal(list.length, 0, 'catalog size')
   assert(isolated.warnings.some((line) => line.includes('does not exist')), 'a warning should explain the missing root')
@@ -361,7 +357,7 @@ check('provider: a broken SKILL.md is skipped, not fatal', async () => {
 check('provider: get() on a vanished file reports undefined and invalidates', async () => {
   const isolated = await activate({ watch: false })
   const [first] = await isolated.provider.list()
-  const ghost = { ...first, locator: join(PACKAGE_DIR, 'vendor', 'missing', 'SKILL.md') }
+  const ghost = { ...first, locator: join(PACKAGE_DIR, 'missing', 'SKILL.md') }
   equal(await isolated.provider.get(ghost, {}), undefined, 'a missing file should load as undefined')
   await isolated.dispose()
 })
@@ -379,24 +375,20 @@ check('vendor: PROVENANCE.json records a commit and a version', () => {
 
 check('vendor: every listed skill directory exists with a SKILL.md', () => {
   for (const skill of vendored) {
-    const path = join(VENDOR_DIR, 'skills', skill.directory, 'SKILL.md')
+    const path = join(VENDOR_DIR, skill.directory, 'SKILL.md')
     assert(statSync(path).isFile(), `${path} should exist`)
   }
 })
 
 check('vendor: no unlisted skill directory is present', () => {
-  const found = []
-  for (const bucket of readdirSync(join(VENDOR_DIR, 'skills'), { withFileTypes: true })) {
-    if (!bucket.isDirectory()) continue
-    for (const entry of readdirSync(join(VENDOR_DIR, 'skills', bucket.name), { withFileTypes: true })) {
-      if (entry.isDirectory()) found.push(`${bucket.name}/${entry.name}`)
-    }
-  }
+  const found = readdirSync(VENDOR_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
   equal(JSON.stringify(found.sort()), JSON.stringify(vendored.map((skill) => skill.directory).sort()), 'directories')
 })
 
 check('vendor: skill resources travel with the body', () => {
-  const codebaseDesign = join(VENDOR_DIR, 'skills', 'engineering', 'codebase-design')
+  const codebaseDesign = join(VENDOR_DIR, 'codebase-design')
   for (const file of ['SKILL.md', 'DEEPENING.md', 'DESIGN-IT-TWICE.md', 'agents/openai.yaml']) {
     assert(statSync(join(codebaseDesign, file)).isFile(), `${file} should be vendored`)
   }
@@ -417,7 +409,7 @@ check('bundle: package.json declares the patch and the runtime entry', () => {
   equal(pkg.dsh.manifestVersion, 1, 'manifest version')
   equal(pkg.main, 'lib/index.js', 'main')
   assert(pkg.files.includes('cordis.patch.yml'), 'files should ship the patch')
-  assert(pkg.files.includes('vendor'), 'files should ship the vendored tree')
+  assert(pkg.files.includes('skills'), 'files should ship the vendored skills')
   equal(pkg.dependencies, undefined, 'the plugin must stay dependency-free')
 })
 
@@ -472,7 +464,7 @@ check('sync: --help prints usage and exits 0', () => {
   assert(!output.includes('@module'), 'the module tag should not leak into help text')
 })
 
-check('sync: a bad argument exits 2 without touching vendor/', () => {
+check('sync: a bad argument exits 2 without touching skills/', () => {
   let status
   try {
     execFileSync(process.execPath, [SYNC, '--bogus'], { encoding: 'utf8', stdio: 'pipe' })
@@ -546,8 +538,8 @@ check('config: apply() accepts exactly what the schema produced', async () => {
   await isolated.dispose()
 })
 
-check('config: provenance false and a bucket list validate', () => {
-  const result = Config['~standard'].validate({ provenance: false, buckets: ['engineering'], watch: false })
+check('config: provenance false and watch false validate', () => {
+  const result = Config['~standard'].validate({ provenance: false, watch: false })
   assert(result.issues === undefined, 'a valid override should validate')
   equal(result.value.provenance, false, 'provenance')
   equal(result.value.watch, false, 'watch')
@@ -556,7 +548,7 @@ check('config: provenance false and a bucket list validate', () => {
 check('config: a mistyped field is rejected', () => {
   equal(Config['~standard'].validate({ watch: 'yes' }).issues !== undefined, true, 'wrong watch type')
   equal(Config['~standard'].validate({ skillRoot: '' }).issues !== undefined, true, 'empty skillRoot')
-  equal(Config['~standard'].validate({ buckets: 'engineering' }).issues !== undefined, true, 'buckets must be an array')
+  equal(Config['~standard'].validate({ skillRoot: 42 }).issues !== undefined, true, 'skillRoot must be a string')
 })
 
 check('config: apply() rejects an unknown key even though Schemastery tolerates it', () => {

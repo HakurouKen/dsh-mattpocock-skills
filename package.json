@@ -14,7 +14,7 @@
   },
   "files": [
     "lib",
-    "vendor",
+    "skills",
     "locale/*.json",
     "cordis.patch.yml",
     "icon.svg",

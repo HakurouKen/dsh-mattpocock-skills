@@ -49,7 +49,7 @@ DSH 会像对待其他本地技能一样发现它们。但这样一来，同样�
 
 - **你希望 agent 配置保持全局、与具体项目无关。** 不需要为每个仓库做初始化，也不把
   `.agents/skills` 提交进各个仓库。
-- **你希望技能版本固定、可审计。** `vendor/` 会在 `PROVENANCE.json` 中记录上游的确切
+- **你希望技能版本固定、可审计。** `skills/PROVENANCE.json` 会记录上游的确切
   commit，而不是跟随一个不断变动的全局目录。
 - **你希望保留「用户调用 / 模型调用」的区分。** 上游标记为
   `disable-model-invocation` 的那 23 个技能，仍然只能通过 `/名称` 调用。
@@ -93,17 +93,17 @@ dsh plugin --profile <profile> remove dsh-mattpocock-skills
 ```bash
 node scripts/sync-skills.mjs               # 跟随默认分支
 node scripts/sync-skills.mjs --ref v1.3.1  # 固定到某个 tag、分支或 commit
-node scripts/sync-skills.mjs --check       # vendor/ 过期时以退出码 1 结束（CI 用）
+node scripts/sync-skills.mjs --check       # skills/ 过期时以退出码 1 结束（CI 用）
 pnpm sync                                  # 等同第一条命令
 ```
 
 这是一个零依赖的 Node.js 脚本，凡是有 `node` 和 `git` 的地方都能运行。它会把上游克隆到
 临时目录，复制每个技能目录（正文及其 `references/`、`scripts/`、`assets/`、`agents/`
-等附属文件），并且只有在暂存副本完整之后才重写 `vendor/mattpocock-skills/` —— 因此运行
+等附属文件），并且只有在暂存副本完整之后才重写 `skills/` —— 因此运行
 中断时，原有目录树仍然可用；即使运行失败，临时目录也会被清理。
 
 它只记录溯源信息 —— 上游仓库、commit、提交日期、版本与技能数量 —— 写入
-`vendor/mattpocock-skills/PROVENANCE.json`，整个文件不到 500 字节。技能清单刻意**不**在该
+`skills/PROVENANCE.json`，整个文件不到 500 字节。技能清单刻意**不**在该
 文件中重复：目录树本身就是清单，因此发现逻辑直接读取目录树，两者不会互相矛盾，也不存在
 重复推导。
 
@@ -111,12 +111,12 @@ pnpm sync                                  # 等同第一条命令
 |---|---|
 | `--ref <ref>` | 用指定的 tag、分支或 commit 替代默认分支 |
 | `--repo <url>` | 从 fork 而非上游克隆 |
-| `--check` | 不写入任何内容；对比暂存的 manifest 与 `vendor/`，不一致时退出码为 1 |
+| `--check` | 不写入任何内容；对比暂存目录与 `skills/`，不一致时退出码为 1 |
 | `MATTPOCOCK_SKILLS_REF` | `--ref` 的默认值 |
 | `MATTPOCOCK_SKILLS_REPO` | `--repo` 的默认值 |
 
 退出码：`0` 成功或已是最新，`1` 失败或已过期，`2` 参数错误。
-`--check` 是 CI 门禁：它仍会克隆（因此能看到上游的新 commit），但从不写入 `vendor/`。
+`--check` 是 CI 门禁：它仍会克隆（因此能看到上游的新 commit），但从不写入 `skills/`。
 
 ### 每日自动同步
 
@@ -124,12 +124,12 @@ pnpm sync                                  # 等同第一条命令
 00:00 UTC** 执行一次同步，因此即使是一个从不手动维护的 fork，也能持续跟随上游。
 
 这个任务刻意保持「安静」：它先执行 `--check`，如果上游没有变化，就直接结束、不产生任何
-提交；只有上游确实变化时，才执行同步、跑完全部 44 项检查，然后才提交 `vendor/` 并推送 ——
+提交；只有上游确实变化时，才执行同步、跑完全部 44 项检查，然后才提交 `skills/` 并推送 ——
 这样一旦上游的 `SKILL.md` 有问题，任务会在检查阶段失败，而不会把坏数据推上分支。
 
 ```
 检查上游 → （无变化）结束
-         → （有变化）同步 → 44 项校验 → 提交 vendor/ → 推送
+         → （有变化）同步 → 44 项校验 → 提交 skills/ → 推送
 ```
 
 几个值得了解的设计细节：
@@ -137,7 +137,7 @@ pnpm sync                                  # 等同第一条命令
 - **不会产生「只改时间戳」的提交。** 同步按内容摘要比较，并刻意剔除 `syncedAt`，
   因此上游没有变化的那一天不会产生提交。也就是说，`syncedAt` 记录的是内容**最后一次
   变化**的时间，而不是最后一次检查的时间。
-- **只提交 `vendor/`。** 任务使用 `git add -- vendor`，因此 runner 中其他位置的意外写入
+- **只提交 `skills/`。** 任务使用 `git add -- skills`，因此 runner 中其他位置的意外写入
   不会被一并带上。
 - **提交刻意不归属到人。** 提交者为 `github-actions[bot]`；并且用 `GITHUB_TOKEN` 产生的
   提交不会触发其他 workflow —— 这份提交是数据，不是发布。
@@ -170,9 +170,12 @@ bundle 的 patch 插入一行 Host 插件。该行在 `ctx.skills` 上注册一�
 vendored 目录树：
 
 ```
-skills/<bucket>/<name>/SKILL.md     -> 一个目录条目
-skills/<bucket>/<name>/references/  -> 该技能的 resource base
+skills/<name>/SKILL.md     -> 一个目录条目
+skills/<name>/references/  -> 该技能的 resource base
 ```
+
+每个技能一个目录，整体扁平。上游的 bucket 层（`engineering`、`productivity` …）被去掉：
+那是上游自己的组织方式，Harness 中没有任何东西消费它，而且跨 bucket 的技能名本就唯一。
 
 它不会写入 `.dsh/skills`、`.agents/skills` 或 `~/.dsh/skills`，因此不会与项目自身的技能
 冲突，也不需要任何按项目进行的配置。vendored 技能携带优先级 `600`，这是打包类 provider
@@ -197,9 +200,8 @@ frontmatter 由一个小型 YAML 子集解析器（`lib/frontmatter.js`）处理
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `skillRoot` | vendored 的 `skills/` 目录树 | 扫描 bucket 子目录的根目录 |
+| `skillRoot` | vendored 的 `skills/` 目录树 | 每个技能一个子目录的根目录 |
 | `provenance` | vendored 的 `PROVENANCE.json` | 来源标注；设为 `false` 可省略 |
-| `buckets` | 全部 bucket | 只保留指定 bucket，如 `["engineering"]` |
 | `watch` | `true` | `SKILL.md` 变化时重建目录 |
 
 未知字段会被拒绝而非忽略，因此 `skillRoot` 拼错时会明确导致激活失败，而不是悄悄回退到
@@ -208,11 +210,12 @@ vendored 目录树。覆盖某个配置行时需重述完整的 `config` 映射�
 
 ## 包含与不包含的内容
 
-包含：每个 `SKILL.md` 及其附属资源、各 bucket 的 `README.md`、上游的 `LICENSE`、顶层
-`README.md`，以及用于溯源的上游 `.claude-plugin/plugin.json`。
+包含：每个技能目录（`SKILL.md` 及其 `references/`、`scripts/`、`assets/`、`agents/`
+等附属文件），以及上游的 `LICENSE` —— 让署名随内容一并传递。
 
-不包含：`skills/deprecated/`（只有一个 README，没有技能）、上游的 `.git`、CI 工作流、
-`docs/`、`.agents/` 与 `.out-of-scope/` —— 这些是上游贡献者的维护材料，不属于技能本身。
+不包含（刻意只保留技能与许可证）：上游各 bucket 的 `README.md`、顶层 `README.md`、
+`.claude-plugin/plugin.json`、`.git`、CI 工作流、`docs/`、`.agents/` 与
+`.out-of-scope/`。`skills/deprecated/` 中没有技能，直接跳过。
 
 有两个上游技能描述的是本 Harness 并不具备的 Claude Code 专有机制：
 `git-guardrails-claude-code` 用于配置 Claude Code hooks，`claude-handoff` 用于把会话交接给
@@ -230,16 +233,16 @@ icon.svg                      bundle 图标
 scripts/sync-skills.mjs        vendor 上游目录树（Node，零依赖）
 scripts/verify.mjs            契约校验
 .github/workflows/sync-skills.yml  每日上游同步（00:00 UTC）
-vendor/mattpocock-skills/     由 sync-skills.mjs 生成 —— 请勿手动修改
+skills/                       由 sync-skills.mjs 生成 —— 请勿手动修改
 ```
 
-`vendor/` 是生成目录。修改它会在下次同步时被覆盖；如需修改某个技能，请 fork 上游并把
+`skills/` 是生成目录。修改它会在下次同步时被覆盖；如需修改某个技能，请 fork 上游并把
 `MATTPOCOCK_SKILLS_REPO` 指向该 fork。
 
 ## 许可
 
 插件代码采用 MIT 许可。vendored 技能为 MIT，版权归 Matt Pocock，上游的 `LICENSE` 随技能
-一并保留在 `vendor/mattpocock-skills/LICENSE`。详见
+一并保留在 `skills/LICENSE`。详见
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 [upstream]: https://github.com/mattpocock/skills
