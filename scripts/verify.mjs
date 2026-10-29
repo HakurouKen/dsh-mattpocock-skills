@@ -520,13 +520,23 @@ check('sync: a stale manifest makes --check exit 1', () => {
 // 8. Row config.
 // ---------------------------------------------------------------------------
 
-check('config: the shipped empty row validates', () => {
+check('config: the shipped empty row validates under either schema backend', () => {
   const result = Config['~standard'].validate(undefined)
   assert(result.issues === undefined, 'an absent config should validate')
-  // Schemastery fills schema defaults before apply() sees the value: an omitted
-  // `buckets` arrives as `[]`, which must mean "no restriction". Asserting the
-  // raw output keeps that contract from regressing into a failed activation.
-  equal(JSON.stringify(result.value), '{"buckets":[]}', 'the loader hands apply() its own defaults')
+  // Two legitimate backends exist, and the environment picks one:
+  // - with Schemastery resolvable (a real profile), the row arrives with
+  //   schema defaults filled in, so an omitted `buckets` becomes `[]`;
+  // - without it (a bare checkout, CI), the package's own validator returns
+  //   the fully normalized settings instead.
+  // Both must pass, so assert the contract rather than one shape: an omitted
+  // `buckets` means "no restriction", and `watch` defaults to on.
+  const value = result.value
+  assert(
+    value.buckets === undefined || (Array.isArray(value.buckets) && value.buckets.length === 0),
+    `an omitted buckets field must mean no restriction, got ${JSON.stringify(value.buckets)}`,
+  )
+  assert(value.watch === undefined || value.watch === true, `watch must default to on, got ${JSON.stringify(value.watch)}`)
+  if (value.skillRoot !== undefined) assert(typeof value.skillRoot === 'string', 'skillRoot must be a string when present')
 })
 
 check('config: apply() accepts exactly what the schema produced', async () => {
