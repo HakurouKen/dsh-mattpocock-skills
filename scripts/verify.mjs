@@ -346,7 +346,10 @@ check('provider: a custom skillRoot is honored', async () => {
   const isolated = await activate({ skillRoot: VENDOR_DIR, watch: false })
   const list = await isolated.provider.list()
   equal(list.length, 38, 'the vendored root should yield every skill')
-  for (const skill of list) equal(skill.source, 'mattpocock/skills@1.3.1', 'a flat tree has no bucket suffix')
+  // Assert the shape, not a version literal: the vendored version moves with
+  // upstream, and pinning it here would fail the daily sync on every release.
+  const versioned = `mattpocock/skills@${manifest.upstream.version}`
+  for (const skill of list) equal(skill.source, versioned, 'a flat tree has no bucket suffix')
   await isolated.dispose()
 })
 
