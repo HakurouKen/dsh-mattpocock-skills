@@ -23,6 +23,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -315,6 +316,47 @@ function compare(stagedPath, currentPath) {
 }
 
 /**
+ * Digest a staged or vendored tree so two runs can be compared by content.
+ *
+ * `PROVENANCE.json` carries a `syncedAt` stamp that changes on every run, so it
+ * is normalized out: otherwise a scheduled sync would produce a commit that
+ * only moves a timestamp, every single day, with no upstream change behind it.
+ * @param {string} dir - tree to hash.
+ * @returns {string} a digest stable across identical trees.
+ */
+function treeDigest(dir) {
+  const hash = createHash('sha256')
+  const walk = (current) => {
+    const entries = readdirSync(current, { withFileTypes: true }).sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    )
+    for (const entry of entries) {
+      const path = join(current, entry.name)
+      if (entry.isDirectory()) {
+        walk(path)
+        continue
+      }
+      const name = path.slice(dir.length + 1)
+      hash.update(name).update('\0')
+      if (name === join('PROVENANCE.json')) {
+        const manifest = readJson(path)
+        if (manifest === undefined) {
+          hash.update(readFileSync(path))
+        } else {
+          // Keep every provenance field except the wall-clock stamp.
+          hash.update(JSON.stringify({ ...manifest, syncedAt: '' }))
+        }
+      } else {
+        hash.update(readFileSync(path))
+      }
+      hash.update('\0')
+    }
+  }
+  walk(dir)
+  return hash.digest('hex')
+}
+
+/**
  * Replace `vendor/` with the stage. The previous tree is removed only after the
  * stage is complete, so an interrupted run leaves the old skills usable.
  * @param {string} stage
@@ -358,6 +400,15 @@ async function main() {
       }
       process.stdout.write(`==> vendor/ is stale: ${reason}\n    re-run scripts/sync-skills.mjs to update\n`)
       return 1
+    }
+
+    // Compare content, not the clock: a daily scheduled run must stay silent
+    // when upstream has not moved, so it cannot commit a timestamp-only change.
+    // `syncedAt` therefore records when the content last changed, not when it
+    // was last checked; nothing is written here, keeping the work tree clean.
+    if (existsSync(VENDOR_DIR) && treeDigest(stage) === treeDigest(VENDOR_DIR)) {
+      process.stdout.write(`==> vendor/ already matches ${result.describe} (${result.commit.slice(0, 12)}); nothing to do\n`)
+      return 0
     }
 
     publish(stage)

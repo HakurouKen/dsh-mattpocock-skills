@@ -114,6 +114,36 @@ pnpm sync                                  # 等同第一条命令
 退出码：`0` 成功或已是最新，`1` 失败或已过期，`2` 参数错误。
 `--check` 是 CI 门禁：它仍会克隆（因此能看到上游的新 commit），但从不写入 `vendor/`。
 
+### 每日自动同步
+
+[`.github/workflows/sync-skills.yml`](.github/workflows/sync-skills.yml) 会**每天
+00:00 UTC** 执行一次同步，因此即使是一个从不手动维护的 fork，也能持续跟随上游。
+
+这个任务刻意保持「安静」：它先执行 `--check`，如果上游没有变化，就直接结束、不产生任何
+提交；只有上游确实变化时，才执行同步、跑完全部 44 项检查，然后才提交 `vendor/` 并推送 ——
+这样一旦上游的 `SKILL.md` 有问题，任务会在检查阶段失败，而不会把坏数据推上分支。
+
+```
+检查上游 → （无变化）结束
+         → （有变化）同步 → 44 项校验 → 提交 vendor/ → 推送
+```
+
+几个值得了解的设计细节：
+
+- **不会产生「只改时间戳」的提交。** 同步按内容摘要比较，并刻意剔除 `syncedAt`，
+  因此上游没有变化的那一天不会产生提交。也就是说，`syncedAt` 记录的是内容**最后一次
+  变化**的时间，而不是最后一次检查的时间。
+- **只提交 `vendor/`。** 任务使用 `git add -- vendor`，因此 runner 中其他位置的意外写入
+  不会被一并带上。
+- **提交刻意不归属到人。** 提交者为 `github-actions[bot]`；并且用 `GITHUB_TOKEN` 产生的
+  提交不会触发其他 workflow —— 这份提交是数据，不是发布。
+- **任务串行执行**，由 `concurrency` 分组保证，两次运行不会争抢同一分支。
+- **可手动触发**：已开启 `workflow_dispatch`，因此你可以在完全信任定时任务之前，先在
+  Actions 页面手动跑一次。
+
+定时工作流只会在默认分支上触发，且 GitHub 的调度是「尽力而为」——请预期有几分钟的偏差，
+而不是精确的零点整。如需暂停自动化，在 Actions 页面禁用该 workflow，或删除该文件。
+
 运行中的 Harness 无需重启即可感知重新同步：provider 会监听 vendored 目录，并调用技能
 注册表的 `invalidate()`，从而在下一个模型步骤追加一份替换目录。只有 `lib/` 的改动用得着
 重启。
@@ -195,6 +225,7 @@ locale/{en,zh}.json           插件管理器的展示元数据
 icon.svg                      bundle 图标
 scripts/sync-skills.mjs        vendor 上游目录树（Node，零依赖）
 scripts/verify.mjs            契约校验
+.github/workflows/sync-skills.yml  每日上游同步（00:00 UTC）
 vendor/mattpocock-skills/     由 sync-skills.mjs 生成 —— 请勿手动修改
 ```
 
