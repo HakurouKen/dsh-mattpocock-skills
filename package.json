@@ -1,5 +1,5 @@
 {
-  "name": "dsh-mattpocock-skills",
+  "name": "dsh-plugin-mattpocock-skills",
   "version": "0.1.0",
   "description": "Matt Pocock's engineering and productivity skills (github.com/mattpocock/skills) as a DeepSeek Harness skill provider, re-synced from upstream by a shell script.",
   "license": "MIT",

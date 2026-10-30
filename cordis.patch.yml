@@ -1,4 +1,4 @@
-# dsh-mattpocock-skills bundle patch.
+# dsh-plugin-mattpocock-skills bundle patch.
 #
 # One Host row. It registers a skill provider over the vendored copies of
 # github.com/mattpocock/skills, so every upstream skill joins the session
@@ -9,4 +9,4 @@
 # because a matching override replaces it instead of merging.
 - insert:
     - id: mattpocock-skills
-      name: dsh-mattpocock-skills
+      name: dsh-plugin-mattpocock-skills

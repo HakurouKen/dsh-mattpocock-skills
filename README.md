@@ -1,4 +1,4 @@
-# dsh-mattpocock-skills
+# dsh-plugin-mattpocock-skills
 
 Turns [mattpocock/skills][upstream] into a dsh plugin.
 
@@ -46,7 +46,7 @@ the synced content pinned and auditable.
 ### Install
 
 ```bash
-dsh plugin --profile <profile> add /absolute/path/to/dsh-mattpocock-skills
+dsh plugin --profile <profile> add /absolute/path/to/dsh-plugin-mattpocock-skills
 ```
 
 Then enable the bundle once — Web UI **Plugins → Bundles**, or add it to
@@ -55,7 +55,7 @@ only loads on boot. All 38 skills then appear in the session catalog, reachable
 with the `skill` tool or as `/name` commands.
 
 ```bash
-dsh plugin --profile <profile> remove dsh-mattpocock-skills   # uninstall
+dsh plugin --profile <profile> remove dsh-plugin-mattpocock-skills   # uninstall
 ```
 
 ### Update from upstream

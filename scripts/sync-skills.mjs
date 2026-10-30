@@ -19,7 +19,7 @@
  *
  * Exit codes: 0 success or up-to-date, 1 failure or stale, 2 bad arguments.
  *
- * @module dsh-mattpocock-skills/sync-skills
+ * @module dsh-plugin-mattpocock-skills/sync-skills
  */
 
 import { execFileSync } from 'node:child_process'

@@ -1,4 +1,4 @@
-# dsh-mattpocock-skills
+# dsh-plugin-mattpocock-skills
 
 将 [mattpocock/skills][upstream] 转化为 dsh 插件。
 
@@ -42,7 +42,7 @@ Codex 的插件方式把技能存在它自己的存储里，Harness 会话读不
 ### 安装
 
 ```bash
-dsh plugin --profile <profile> add /absolute/path/to/dsh-mattpocock-skills
+dsh plugin --profile <profile> add /absolute/path/to/dsh-plugin-mattpocock-skills
 ```
 
 然后启用一次 bundle —— Web 界面 **插件 → Bundle**，或写入 `dsh.profile.bundles` ——
@@ -50,7 +50,7 @@ dsh plugin --profile <profile> add /absolute/path/to/dsh-mattpocock-skills
 可通过 `skill` 工具或 `/名称` 命令调用。
 
 ```bash
-dsh plugin --profile <profile> remove dsh-mattpocock-skills   # 卸载
+dsh plugin --profile <profile> remove dsh-plugin-mattpocock-skills   # 卸载
 ```
 
 ### 从上游更新

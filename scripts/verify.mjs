@@ -435,7 +435,7 @@ check('bundle: the patch inserts exactly the row this package exports', () => {
   const rows = [...patch.matchAll(/^\s*-\s+id:\s*(\S+)\s*\n\s+name:\s*(\S+)/gm)].map((match) => ({ id: match[1], name: match[2] }))
   equal(rows.length, 1, 'row count')
   equal(rows[0].id, 'mattpocock-skills', 'row id')
-  equal(rows[0].name, 'dsh-mattpocock-skills', 'row name')
+  equal(rows[0].name, 'dsh-plugin-mattpocock-skills', 'row name')
   equal(rows[0].name, pkg.name, 'row name should be the package name')
   assert(/^-\s+insert:/m.test(patch), 'the patch should insert rather than override')
 })
