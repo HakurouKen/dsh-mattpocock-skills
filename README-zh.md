@@ -1,7 +1,6 @@
 # dsh-mattpocock-skills
 
-将 [mattpocock/skills][upstream] 中的全部 38 个技能打包为 DeepSeek Harness
-插件 bundle。技能内容由**脚本从上游 vendor 而来**，从不手工复制，升级只需一条命令。
+将 [mattpocock/skills][upstream] 转化为 dsh 插件。
 
 [English](README.md) | **简体中文**
 

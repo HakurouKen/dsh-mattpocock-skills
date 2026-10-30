@@ -1,8 +1,6 @@
 # dsh-mattpocock-skills
 
-Every skill from [mattpocock/skills][upstream] — 38 in total — packaged as a
-DeepSeek Harness plugin bundle. Skill content is **vendored from upstream by a
-script**, never hand-copied, so updating takes one command.
+Turns [mattpocock/skills][upstream] into a dsh plugin.
 
 **English** | [简体中文](README-zh.md)
 
