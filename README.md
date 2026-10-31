@@ -45,6 +45,14 @@ the synced content pinned and auditable.
 
 ### Install
 
+From npm:
+
+```bash
+dsh plugin --profile <profile> add dsh-plugin-mattpocock-skills
+```
+
+From a checkout:
+
 ```bash
 dsh plugin --profile <profile> add /absolute/path/to/dsh-plugin-mattpocock-skills
 ```

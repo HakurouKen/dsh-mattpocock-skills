@@ -494,8 +494,9 @@ check('release: the version policy is documented in the workflow', () => {
   for (const word of ['patch', 'minor', 'major', 'publish-current']) {
     assert(workflow.includes(word), `release.yml should mention "${word}"`)
   }
-  // A major must never be published on the automatic path.
-  assert(/initial \| major\)/.test(workflow), 'auto must bail out on initial/major')
+  // The first publish and every major must bail out of the automatic path.
+  assert(/^\s+initial\)$/m.test(workflow), 'auto must bail out on the first publish')
+  assert(/^\s+major\)$/m.test(workflow), 'auto must bail out on a major')
   assert(workflow.includes('id-token: write'), 'npm provenance needs id-token: write')
 })
 

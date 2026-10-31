@@ -41,6 +41,14 @@ Codex 的插件方式把技能存在它自己的存储里，Harness 会话读不
 
 ### 安装
 
+从 npm 安装：
+
+```bash
+dsh plugin --profile <profile> add dsh-plugin-mattpocock-skills
+```
+
+从本地检出安装：
+
 ```bash
 dsh plugin --profile <profile> add /absolute/path/to/dsh-plugin-mattpocock-skills
 ```
