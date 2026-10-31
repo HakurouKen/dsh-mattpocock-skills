@@ -459,7 +459,48 @@ check('bundle: the icon is a non-empty SVG under the size limit', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 7. The sync script.
+// 7. The release script.
+// ---------------------------------------------------------------------------
+
+const RELEASE = join(PACKAGE_DIR, 'scripts', 'release.mjs')
+
+check('release: the script is Node-only and dependency-free', () => {
+  assert(statSync(RELEASE).isFile(), 'scripts/release.mjs should exist')
+  const source = readFileSync(RELEASE, 'utf8')
+  assert(source.startsWith('#!/usr/bin/env node'), 'a Node shebang should open the file')
+  const imports = [...source.matchAll(/^import .*? from '([^']+)'/gm)].map((match) => match[1])
+  const external = imports.filter((specifier) => !specifier.startsWith('node:') && !specifier.startsWith('.'))
+  equal(JSON.stringify(external), '[]', 'only node: builtins and relative imports are allowed')
+})
+
+check('release: version bumps are semver-correct', async () => {
+  const { bumpVersion } = await import(RELEASE)
+  equal(bumpVersion('1.2.3', 'patch'), '1.2.4', 'patch')
+  equal(bumpVersion('1.2.3', 'minor'), '1.3.0', 'minor resets patch')
+  equal(bumpVersion('1.2.3', 'major'), '2.0.0', 'major resets minor and patch')
+  equal(bumpVersion('0.1.0', 'patch'), '0.1.1', 'a pre-1.0 patch')
+  let threw = false
+  try {
+    bumpVersion('not-a-version', 'patch')
+  } catch {
+    threw = true
+  }
+  assert(threw, 'a non-semver version must throw rather than produce nonsense')
+})
+
+check('release: the version policy is documented in the workflow', () => {
+  const workflow = readFileSync(join(PACKAGE_DIR, '.github', 'workflows', 'release.yml'), 'utf8')
+  // The policy is the contract users read; keep the four cases present.
+  for (const word of ['patch', 'minor', 'major', 'publish-current']) {
+    assert(workflow.includes(word), `release.yml should mention "${word}"`)
+  }
+  // A major must never be published on the automatic path.
+  assert(/initial \| major\)/.test(workflow), 'auto must bail out on initial/major')
+  assert(workflow.includes('id-token: write'), 'npm provenance needs id-token: write')
+})
+
+// ---------------------------------------------------------------------------
+// 8. The sync script.
 // ---------------------------------------------------------------------------
 
 const SYNC = join(PACKAGE_DIR, 'scripts', 'sync-skills.mjs')

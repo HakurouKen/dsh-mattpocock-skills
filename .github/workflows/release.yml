@@ -1,0 +1,194 @@
+name: Release
+
+# Publishes to npm following one rule, measured as a diff against the last
+# `v*` tag:
+#
+#   patch  skill content changed
+#   minor  skills were added or removed
+#   major  the plugin's structure changed (patch, lib/, package.json shape)
+#
+# patch and minor run automatically after a sync. major never does: it needs a
+# human to dispatch this workflow with `mode: major`, because a structural
+# change can invalidate installed compositions. The first publish is manual too.
+
+on:
+  workflow_run:
+    # Runs after the daily sync, and is a no-op when that sync committed nothing.
+    workflows: ["Sync upstream skills"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          auto follows the version policy. A bump forces that release.
+          publish-current re-publishes the version already in package.json, for
+          retrying a failed publish.
+        type: choice
+        options: [auto, publish-current, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: write
+  # Required for npm provenance attestation.
+  id-token: write
+
+# A release mutates the branch and the registry; never run two at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version, tag, and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          # Tags are the baseline the version policy compares against, and
+          # `git describe` needs them to find the last release.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Check that npm credentials exist
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN is not set. Add an npm automation token with read+write access to this repository's secrets, then re-run."
+            exit 1
+          fi
+
+      - name: Decide the next version
+        id: plan
+        env:
+          MODE: ${{ inputs.mode || 'auto' }}
+        run: |
+          set -euo pipefail
+
+          # Read one field out of the JSON plan without another dependency.
+          field() {
+            node -e '
+              let raw = ""
+              process.stdin.on("data", (c) => (raw += c)).on("end", () => {
+                process.stdout.write(String(JSON.parse(raw)[process.argv[1]] ?? ""))
+              })
+            ' "$1"
+          }
+
+          plan=$(node scripts/release.mjs plan)
+          planned=$(printf '%s' "$plan" | field bump)
+          reason=$(printf '%s' "$plan" | field reason)
+          echo "policy says: ${planned} — ${reason}"
+
+          case "$MODE" in
+            auto)
+              case "$planned" in
+                none) bump=none ;;
+                initial | major)
+                  echo "::notice::Not releasing automatically (${planned}). Dispatch this workflow with mode=${planned} to publish it deliberately."
+                  {
+                    echo "skip=true"
+                    echo "bump=none"
+                    echo "publish=false"
+                  } >> "$GITHUB_OUTPUT"
+                  exit 0
+                  ;;
+                *) bump="$planned" ;;
+              esac
+              ;;
+            publish-current) bump=none ;;
+            *) bump="$MODE" ;;
+          esac
+
+          version=$(node scripts/release.mjs version)
+          tag="v${version}"
+          name=$(node -p 'require("./package.json").name')
+          publish=false
+
+          if [ "$bump" != none ]; then
+            # A bump produces a version npm cannot have yet.
+            publish=true
+          elif git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            # No bump, but this version is tagged: a previous run may have
+            # tagged and then failed to publish. Publishing again is the retry.
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "already published: ${tag}"
+            else
+              echo "${tag} is tagged but missing from npm; publishing it"
+              publish=true
+            fi
+          fi
+
+          {
+            echo "skip=false"
+            echo "bump=${bump}"
+            echo "publish=${publish}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply the bump
+        if: steps.plan.outputs.bump != 'none' && steps.plan.outputs.skip != 'true'
+        env:
+          BUMP: ${{ steps.plan.outputs.bump }}
+        run: |
+          set -euo pipefail
+          echo "bumped to $(node scripts/release.mjs apply "${BUMP}")"
+
+      - name: Verify the package contracts
+        if: steps.plan.outputs.skip != 'true'
+        run: node scripts/verify.mjs
+
+      - name: Commit and tag the release
+        if: steps.plan.outputs.bump != 'none' && steps.plan.outputs.skip != 'true'
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          tag=$(node scripts/release.mjs tag)
+
+          # Only the version field may change here: skills/ was committed by the
+          # sync workflow, so a stray edit must not ride along.
+          git add -- package.json
+          if git diff --cached --quiet; then
+            echo "::error::expected a version bump but package.json is unchanged"
+            exit 1
+          fi
+          git commit -m "chore(release): ${tag}"
+          git tag -a "${tag}" -m "${tag}"
+          git push origin main
+          git push origin "${tag}"
+          echo "tagged ${tag}"
+
+      - name: Publish to npm
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          name=$(node -p 'require("./package.json").name')
+          version=$(node scripts/release.mjs version)
+          echo "publishing ${name}@${version}"
+          # Idempotent: a retry after a partial run must not fail here.
+          if npm view "${name}@${version}" version >/dev/null 2>&1; then
+            echo "already on npm, nothing to do"
+            exit 0
+          fi
+          npm publish --provenance --access public
+
+      - name: Report nothing to release
+        if: steps.plan.outputs.skip == 'true' || steps.plan.outputs.publish == 'false'
+        run: echo "No release published for this run."

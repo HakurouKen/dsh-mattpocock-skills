@@ -79,6 +79,19 @@ node scripts/verify.mjs
 44 项检查，覆盖 frontmatter 解析器、注册表校验器、每个技能的目录条目与加载出的正文、
 bundle 元数据，以及同步脚本的退出码。
 
+### 发布
+
+按「相对上一个 `v*` tag 的差异」决定版本并发布到 npm：
+
+| 自上个 tag 以来的变化 | 版本 |
+|---|---|
+| 技能内容 | **patch** |
+| 技能增删 | **minor** |
+| 插件结构（`cordis.patch.yml`、`lib/`、清单结构） | **major** |
+
+CI 在同步后自动发布 patch 与 minor。**major 永不自动发布** —— 必须手动运行 Release
+workflow，因为结构性改动可能让已安装的组合失效。首次发布同理，也需手动。
+
 ### 配置
 
 该行无需 `config`。可选字段：`skillRoot`（默认 vendored 的 `skills/`）、`provenance`

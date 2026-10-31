@@ -89,6 +89,21 @@ node scripts/verify.mjs
 catalog entry and loaded body, the bundle metadata, and the sync script's exit
 codes.
 
+### Release
+
+Published to npm on a policy measured against the last `v*` tag:
+
+| Change since the last tag | Version |
+|---|---|
+| skill content | **patch** |
+| skills added or removed | **minor** |
+| plugin structure (`cordis.patch.yml`, `lib/`, manifest shape) | **major** |
+
+CI publishes patch and minor automatically after a sync. A **major is never
+automatic** — it needs a manual run of the Release workflow, because a
+structural change can invalidate installed compositions. The first publish is
+manual for the same reason.
+
 ### Configuration
 
 The row needs no `config`. Optional fields: `skillRoot` (default: the vendored
