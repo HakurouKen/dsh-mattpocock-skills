@@ -92,12 +92,24 @@ jobs:
           reason=$(printf '%s' "$plan" | field reason)
           echo "policy says: ${planned} — ${reason}"
 
+          # The version as it stands now; a bump applied later produces a new one.
+          version=$(node scripts/release.mjs version)
+
           case "$MODE" in
             auto)
               case "$planned" in
                 none) bump=none ;;
-                initial | major)
-                  echo "::notice::Not releasing automatically (${planned}). Dispatch this workflow with mode=${planned} to publish it deliberately."
+                initial)
+                  echo "::notice::Not releasing automatically: nothing has been published yet. Dispatch this workflow with mode=publish-current to publish ${version} deliberately."
+                  {
+                    echo "skip=true"
+                    echo "bump=none"
+                    echo "publish=false"
+                  } >> "$GITHUB_OUTPUT"
+                  exit 0
+                  ;;
+                major)
+                  echo "::notice::Not releasing automatically: the plugin structure changed. Dispatch this workflow with mode=major to publish it deliberately."
                   {
                     echo "skip=true"
                     echo "bump=none"
@@ -112,22 +124,29 @@ jobs:
             *) bump="$MODE" ;;
           esac
 
-          version=$(node scripts/release.mjs version)
-          tag="v${version}"
           name=$(node -p 'require("./package.json").name')
           publish=false
+          tag_needed=false
 
           if [ "$bump" != none ]; then
-            # A bump produces a version npm cannot have yet.
+            # A bump always yields a version that is neither tagged nor on npm.
             publish=true
-          elif git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            # No bump, but this version is tagged: a previous run may have
-            # tagged and then failed to publish. Publishing again is the retry.
-            if npm view "${name}@${version}" version >/dev/null 2>&1; then
-              echo "already published: ${tag}"
+            tag_needed=true
+          else
+            tag="v${version}"
+            if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+              if npm view "${name}@${version}" version >/dev/null 2>&1; then
+                echo "already released and published: ${tag}"
+              else
+                # Tagged but absent from npm: a previous run tagged and then
+                # failed to publish. Publishing again is the retry.
+                echo "${tag} is tagged but missing from npm; publishing it"
+                publish=true
+              fi
             else
-              echo "${tag} is tagged but missing from npm; publishing it"
+              # Never tagged: this is the first publish of this version.
               publish=true
+              tag_needed=true
             fi
           fi
 
@@ -135,6 +154,7 @@ jobs:
             echo "skip=false"
             echo "bump=${bump}"
             echo "publish=${publish}"
+            echo "tag_needed=${tag_needed}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Apply the bump
@@ -150,7 +170,7 @@ jobs:
         run: node scripts/verify.mjs
 
       - name: Commit and tag the release
-        if: steps.plan.outputs.bump != 'none' && steps.plan.outputs.skip != 'true'
+        if: steps.plan.outputs.tag_needed == 'true'
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
@@ -164,14 +184,20 @@ jobs:
           # sync workflow, so a stray edit must not ride along.
           git add -- package.json
           if git diff --cached --quiet; then
-            echo "::error::expected a version bump but package.json is unchanged"
-            exit 1
+            # First publish of an unbumped version: nothing to commit, but the
+            # release still needs a tag so later runs have a baseline.
+            echo "no version change to commit"
+          else
+            git commit -m "chore(release): ${tag}"
+            git push origin main
           fi
-          git commit -m "chore(release): ${tag}"
-          git tag -a "${tag}" -m "${tag}"
-          git push origin main
-          git push origin "${tag}"
-          echo "tagged ${tag}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "${tag} already exists"
+          else
+            git tag -a "${tag}" -m "${tag}"
+            git push origin "${tag}"
+            echo "tagged ${tag}"
+          fi
 
       - name: Publish to npm
         if: steps.plan.outputs.publish == 'true'
