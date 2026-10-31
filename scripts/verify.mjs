@@ -498,6 +498,11 @@ check('release: the version policy is documented in the workflow', () => {
   assert(/^\s+initial\)$/m.test(workflow), 'auto must bail out on the first publish')
   assert(/^\s+major\)$/m.test(workflow), 'auto must bail out on a major')
   assert(workflow.includes('id-token: write'), 'npm provenance needs id-token: write')
+  // Trusted publishing replaced the token secret on purpose: a long-lived npm
+  // token in repository secrets is what npm is steering away from.
+  assert(!workflow.includes('NPM_TOKEN'), 'the release workflow must not depend on an npm token secret')
+  assert(/npm install -g npm@\^?11\./.test(workflow), 'trusted publishing needs npm >= 11.5.1, newer than Node 20 ships')
+  assert(workflow.includes('npm publish --provenance'), 'publishing should request provenance')
 })
 
 // ---------------------------------------------------------------------------

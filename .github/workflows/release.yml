@@ -61,14 +61,11 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - name: Check that npm credentials exist
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Use an npm that supports trusted publishing
         run: |
-          if [ -z "${NPM_TOKEN:-}" ]; then
-            echo "::error::NPM_TOKEN is not set. Add an npm automation token with read+write access to this repository's secrets, then re-run."
-            exit 1
-          fi
+          # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 20 ships npm 10.
+          npm install -g npm@^11.21.1
+          npm --version
 
       - name: Decide the next version
         id: plan
@@ -201,19 +198,25 @@ jobs:
 
       - name: Publish to npm
         if: steps.plan.outputs.publish == 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # No token secret: npm exchanges this job's OIDC identity for a
+        # short-lived publish credential, and attaches a provenance statement
+        # naming this repository and workflow.
         run: |
           set -euo pipefail
           name=$(node -p 'require("./package.json").name')
           version=$(node scripts/release.mjs version)
           echo "publishing ${name}@${version}"
+
           # Idempotent: a retry after a partial run must not fail here.
           if npm view "${name}@${version}" version >/dev/null 2>&1; then
             echo "already on npm, nothing to do"
             exit 0
           fi
-          npm publish --provenance --access public
+
+          if ! npm publish --provenance --access public; then
+            echo "::error::npm publish failed. Trusted publishing must be configured on npmjs.com for ${name}: Settings -> Trusted Publisher -> GitHub Actions, repository owner HakurouKen, repository dsh-plugin-mattpocock-skills, workflow file release.yml, and publish permission enabled. The first publish of a new package cannot use trusted publishing and must be done manually."
+            exit 1
+          fi
 
       - name: Report nothing to release
         if: steps.plan.outputs.skip == 'true' || steps.plan.outputs.publish == 'false'

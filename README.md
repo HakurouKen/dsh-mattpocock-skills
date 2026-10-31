@@ -109,8 +109,19 @@ Published to npm on a policy measured against the last `v*` tag:
 
 CI publishes patch and minor automatically after a sync. A **major is never
 automatic** — it needs a manual run of the Release workflow, because a
-structural change can invalidate installed compositions. The first publish is
-manual for the same reason.
+structural change can invalidate installed compositions.
+
+Publishing uses [trusted publishing][trusted]: the workflow exchanges its
+GitHub OIDC identity for a short-lived npm credential and attaches a provenance
+statement, so **no npm token is stored in this repository**. One-time setup on
+npmjs.com — package → Settings → Trusted Publisher → GitHub Actions with owner
+`HakurouKen`, repository `dsh-plugin-mattpocock-skills`, workflow `release.yml`,
+and publish permission enabled.
+
+A brand-new package cannot use a trust relationship, so the **first publish is
+manual**: `npm login && npm publish --access public`, then configure the trust
+relationship and run the workflow once with `mode: publish-current` to record
+the `v0.1.0` tag.
 
 ### Configuration
 
@@ -125,3 +136,4 @@ upstream licence at `skills/LICENSE`; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 [upstream]: https://github.com/mattpocock/skills
+[trusted]: https://docs.npmjs.com/trusted-publishers

@@ -98,7 +98,15 @@ bundle 元数据，以及同步脚本的退出码。
 | 插件结构（`cordis.patch.yml`、`lib/`、清单结构） | **major** |
 
 CI 在同步后自动发布 patch 与 minor。**major 永不自动发布** —— 必须手动运行 Release
-workflow，因为结构性改动可能让已安装的组合失效。首次发布同理，也需手动。
+workflow，因为结构性改动可能让已安装的组合失效。
+
+发布使用 [可信发布（trusted publishing）][trusted]：workflow 用 GitHub OIDC 身份换取短期
+npm 凭据，并附上 provenance 证明，因此**仓库中不保存任何 npm token**。需在 npmjs.com
+一次性配置 —— 包 → Settings → Trusted Publisher → GitHub Actions，owner 填 `HakurouKen`、
+仓库 `dsh-plugin-mattpocock-skills`、workflow 填 `release.yml`，并勾选允许发布。
+
+新包无法使用信任关系，所以**首次发布需手动**：`npm login && npm publish --access public`，
+再配置信任关系，并以 `mode: publish-current` 跑一次 workflow 以记录 `v0.1.0` tag。
 
 ### 配置
 
@@ -112,3 +120,4 @@ workflow，因为结构性改动可能让已安装的组合失效。首次发布
 详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 [upstream]: https://github.com/mattpocock/skills
+[trusted]: https://docs.npmjs.com/trusted-publishers
