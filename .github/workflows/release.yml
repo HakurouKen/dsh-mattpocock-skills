@@ -59,7 +59,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://registry.npmjs.org
+          # Deliberately no `registry-url`: it writes an `_authToken` line that
+          # expands to empty without a token secret, and an empty credential can
+          # shadow the OIDC exchange. The publish command names the registry.
 
       - name: Use an npm that supports trusted publishing
         run: |
@@ -213,7 +215,7 @@ jobs:
             exit 0
           fi
 
-          if ! npm publish --provenance --access public; then
+          if ! npm publish --provenance --access public --registry https://registry.npmjs.org; then
             echo "::error::npm publish failed. Trusted publishing must be configured on npmjs.com for ${name}: Settings -> Trusted Publisher -> GitHub Actions, repository owner HakurouKen, repository dsh-plugin-mattpocock-skills, workflow file release.yml, and publish permission enabled. The first publish of a new package cannot use trusted publishing and must be done manually."
             exit 1
           fi
